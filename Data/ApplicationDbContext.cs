@@ -58,14 +58,15 @@ namespace AuditManagement.Data
             var auditEntries = OnBeforeSaveChanges();
             _logger.LogInformation($"Found {auditEntries.Count} audit entries");
             
+            var result = await base.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Changes saved");
+
             if (auditEntries.Any())
             {
                 _logger.LogInformation("Processing audit entries");
                 OnAfterSaveChanges(auditEntries);
+                await base.SaveChangesAsync(cancellationToken);
             }
-
-            var result = await base.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Changes saved");
             
             return result;
         }
@@ -85,12 +86,21 @@ namespace AuditManagement.Data
                     continue;
                 }
 
-                var tableName = entry.Metadata.GetTableName() ?? "Unknown";
-                var userId = _httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "Anonymous";
-                var ipAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "Unknown";
-                var userAgent = _httpContextAccessor.HttpContext?.Request?.Headers["User-Agent"].ToString() ?? "Unknown";
+                var tableName = entry.Metadata.GetTableName();
+                if (string.IsNullOrEmpty(tableName)) tableName = "Unknown";
+
+                var userId = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+                if (string.IsNullOrEmpty(userId)) userId = "Anonymous";
+
+                var ipAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+                if (string.IsNullOrEmpty(ipAddress)) ipAddress = "Unknown";
+
+                var userAgent = _httpContextAccessor.HttpContext?.Request?.Headers["User-Agent"].ToString();
+                if (string.IsNullOrEmpty(userAgent)) userAgent = "Unknown";
+
                 var action = entry.State.ToString();
-                var recordId = entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString() ?? "Unknown";
+                var recordId = entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString();
+                if (string.IsNullOrEmpty(recordId)) recordId = "Unknown";
 
                 _logger.LogInformation($"Creating audit entry for {tableName} with action {action}");
 
