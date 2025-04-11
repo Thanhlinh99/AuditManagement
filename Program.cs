@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using AuditManagement.Data;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +28,15 @@ builder.Logging.AddDebug();
 
 var app = builder.Build();
 
+// Configure Forwarded Headers
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    // Cấu hình để tin tưởng tất cả các proxy
+    ForwardLimit = null,
+    KnownProxies = { System.Net.IPAddress.Parse("0.0.0.0") }
+});
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -40,3 +51,40 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Extension method để lấy IP từ header X-Forwarded-For
+public static class HttpContextExtensions
+{
+    public static string GetClientIP(this HttpContext context)
+    {
+        // Thử lấy từ X-Forwarded-For trước
+        var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
+        if (!string.IsNullOrEmpty(forwardedFor))
+        {
+            // Lấy IP đầu tiên trong danh sách (IP thực của client)
+            var ips = forwardedFor.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var ip = ips[0].Trim();
+            
+            // Xử lý trường hợp IPv6-mapped IPv4
+            if (ip.StartsWith("::ffff:"))
+            {
+                return ip.Substring(7); // Bỏ phần ::ffff: để lấy IPv4
+            }
+            return ip;
+        }
+
+        // Nếu không có X-Forwarded-For, lấy IP trực tiếp
+        var remoteIp = context.Connection.RemoteIpAddress;
+        if (remoteIp != null)
+        {
+            // Xử lý trường hợp IPv6-mapped IPv4
+            if (remoteIp.IsIPv4MappedToIPv6)
+            {
+                return remoteIp.MapToIPv4().ToString();
+            }
+            return remoteIp.ToString();
+        }
+
+        return "Unknown";
+    }
+}

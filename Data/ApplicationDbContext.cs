@@ -92,8 +92,7 @@ namespace AuditManagement.Data
                 var userId = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
                 if (string.IsNullOrEmpty(userId)) userId = "Anonymous";
 
-                var ipAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
-                if (string.IsNullOrEmpty(ipAddress)) ipAddress = "Unknown";
+                var ipAddress = _httpContextAccessor.HttpContext?.GetClientIP() ?? "Unknown";
 
                 var userAgent = _httpContextAccessor.HttpContext?.Request?.Headers["User-Agent"].ToString();
                 if (string.IsNullOrEmpty(userAgent)) userAgent = "Unknown";
