@@ -72,12 +72,11 @@ dotnet build
 dotnet run
 ```
 
-Sau khi chạy thành công, API sẽ chạy tại địa chỉ: `https://localhost:5001` hoặc `http://localhost:5000`
+Sau khi chạy thành công, API sẽ chạy tại địa chỉ: `http://localhost:5000`
 
 ### 6. Kiểm Tra API
 
 1. Mở trình duyệt và truy cập Swagger UI:
-   - `https://localhost:5001/swagger` hoặc
    - `http://localhost:5000/swagger`
 
 2. Thử các API endpoints:
@@ -85,42 +84,106 @@ Sau khi chạy thành công, API sẽ chạy tại địa chỉ: `https://localh
    - PUT /api/Product/update/{id}
    - DELETE /api/Product/delete/{id}
 
-### 7. Kiểm Tra Audit Log
+## Hướng Dẫn Sử Dụng Tính Năng Audit Logging
 
-1. Mở SQL Server Management Studio
-2. Chạy câu lệnh SQL để kiểm tra log:
-```sql
-USE AuditManagement;
-SELECT * FROM AuditLog ORDER BY Timestamp DESC;
+### 1. Audit Logging Tự Động
+
+Hệ thống tự động ghi lại các thay đổi dữ liệu trên các bảng:
+- Product
+- Customer
+- Order
+
+Khi thực hiện các thao tác Create/Update/Delete, hệ thống sẽ tự động ghi log với các thông tin:
+- UserId: ID người thực hiện
+- Action: Loại thao tác (Create, Update, Delete)
+- TableName: Tên bảng
+- RecordId: ID bản ghi
+- Changes: Nội dung thay đổi
+- Timestamp: Thời gian
+- IpAddress: Địa chỉ IP
+- UserAgent: Thông tin trình duyệt
+
+### 2. Ghi Log Tùy Chỉnh
+
+Bạn có thể ghi log ở bất kỳ đâu trong code bằng cách:
+
+1. Inject `IAuditService` vào class cần sử dụng:
+```csharp
+private readonly IAuditService _auditService;
+
+public YourClass(IAuditService auditService)
+{
+    _auditService = auditService;
+}
 ```
 
-## Xử Lý Lỗi Thường Gặp
+2. Gọi phương thức `LogAsync` để ghi log:
+```csharp
+await _auditService.LogAsync(
+    action: "TÊN_HÀNH_ĐỘNG", // Tên hành động tùy ý
+    tableName: "TÊN_BẢNG",    // Tên bảng liên quan
+    recordId: "ID_BẢN_GHI",   // ID của bản ghi
+    oldValues: object,        // Giá trị cũ (nếu có)
+    newValues: object         // Giá trị mới (nếu có)
+);
+```
 
-1. **Lỗi Connection String**:
-   - Kiểm tra server name, database name, username và password
-   - Đảm bảo SQL Server đang chạy
-   - Kiểm tra quyền truy cập của user
+### 3. Ví Dụ Sử Dụng
 
-2. **Lỗi Migration**:
-   - Xóa thư mục Migrations nếu cần
-   - Chạy lại `dotnet ef migrations add InitialCreate`
-   - Kiểm tra các model class có đúng cấu trúc không
+1. Ghi log khi thực hiện thao tác đặc biệt:
+```csharp
+await _auditService.LogAsync(
+    action: "APPROVE_ORDER",
+    tableName: "Order",
+    recordId: orderId.ToString(),
+    newValues: new { Status = "Approved", ApprovedBy = userId }
+);
+```
 
-3. **Lỗi Build**:
-   - Kiểm tra version của .NET SDK
-   - Kiểm tra các package reference trong .csproj
-   - Clean solution và build lại
+2. Ghi log khi có sự kiện quan trọng:
+```csharp
+await _auditService.LogAsync(
+    action: "SYSTEM_EVENT",
+    tableName: "System",
+    recordId: "0",
+    newValues: new { Event = "Backup completed", Timestamp = DateTime.UtcNow }
+);
+```
 
-4. **Lỗi Runtime**:
-   - Kiểm tra logs trong console
-   - Kiểm tra connection string
-   - Kiểm tra các service đã được đăng ký trong Program.cs
+3. Ghi log khi có lỗi xảy ra:
+```csharp
+await _auditService.LogAsync(
+    action: "ERROR",
+    tableName: "ErrorLog",
+    recordId: Guid.NewGuid().ToString(),
+    newValues: new { 
+        Error = ex.Message,
+        StackTrace = ex.StackTrace,
+        Timestamp = DateTime.UtcNow 
+    }
+);
+```
 
-## Các Tính Năng
+### 4. Kiểm Tra Audit Log
 
-- Tự động ghi lại các thao tác thêm, sửa, xóa dữ liệu
-- Lưu thông tin chi tiết về người thực hiện, thời gian, và nội dung thay đổi
-- Hỗ trợ theo dõi thay đổi cho nhiều bảng dữ liệu
+1. Truy vấn trực tiếp trong database:
+```sql
+-- Xem tất cả audit log
+SELECT * FROM AuditLog ORDER BY Timestamp DESC;
+
+-- Xem audit log của một bảng cụ thể
+SELECT * FROM AuditLog WHERE TableName = 'Product' ORDER BY Timestamp DESC;
+
+-- Xem audit log của một người dùng cụ thể
+SELECT * FROM AuditLog WHERE UserId = 'user123' ORDER BY Timestamp DESC;
+```
+
+2. Thông qua API:
+```http
+GET /api/AuditLog
+GET /api/AuditLog/table/{tableName}
+GET /api/AuditLog/user/{userId}
+```
 
 ## Cấu Trúc Dự Án
 
@@ -129,146 +192,9 @@ AuditManagement/
 ├── Controllers/         # Các API endpoints
 ├── Data/               # Database context và cấu hình
 ├── Models/             # Các model class
+├── Services/           # Các service (bao gồm AuditService)
 ├── Audit/              # Các class liên quan đến audit
 └── Program.cs          # Cấu hình ứng dụng
-```
-
-## Hướng Dẫn Mở Rộng Hệ Thống Audit
-
-### 1. Thêm Bảng Mới Cần Theo Dõi Audit
-
-Để thêm một bảng mới vào hệ thống audit, bạn cần:
-
-1. Tạo model class trong thư mục `Models/`:
-```csharp
-public class YourNewEntity
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    // Các properties khác
-}
-```
-
-2. Thêm DbSet vào `ApplicationDbContext`:
-```csharp
-public class ApplicationDbContext : DbContext
-{
-    public DbSet<YourNewEntity> YourNewEntities { get; set; }
-    // Các DbSet khác
-}
-```
-
-3. Tạo migration và cập nhật database:
-```bash
-dotnet ef migrations add AddYourNewEntity
-dotnet ef database update
-```
-
-### 2. Tích Hợp Với Hệ Thống User
-
-Nếu bạn đã có hệ thống User, để thay thế "Anonymous" bằng UserId thực tế:
-
-1. Đảm bảo `IHttpContextAccessor` đã được đăng ký trong `Program.cs`:
-```csharp
-builder.Services.AddHttpContextAccessor();
-```
-
-2. Sửa `ApplicationDbContext` để lấy UserId từ HttpContext:
-```csharp
-public class ApplicationDbContext : DbContext
-{
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public ApplicationDbContext(
-        DbContextOptions<ApplicationDbContext> options,
-        IHttpContextAccessor httpContextAccessor) 
-        : base(options)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
-
-    private string GetCurrentUserId()
-    {
-        // Lấy UserId từ HttpContext
-        var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return userId ?? "Anonymous";
-    }
-
-    public override int SaveChanges()
-    {
-        var userId = GetCurrentUserId();
-        // Sử dụng userId trong quá trình tạo audit log
-        // ...
-    }
-}
-```
-
-### 3. Cấu Hình Audit Log
-
-1. Các trường trong bảng `AuditLog`:
-```csharp
-public class AuditLog
-{
-    public int Id { get; set; }
-    public string UserId { get; set; }        // ID của người thực hiện
-    public string Action { get; set; }        // Create, Update, Delete
-    public string TableName { get; set; }     // Tên bảng bị thay đổi
-    public string RecordId { get; set; }      // ID của bản ghi bị thay đổi
-    public string Changes { get; set; }       // Nội dung thay đổi (JSON)
-    public DateTime Timestamp { get; set; }   // Thời gian thực hiện
-    public string IpAddress { get; set; }     // Địa chỉ IP
-    public string UserAgent { get; set; }     // Thông tin trình duyệt
-}
-```
-
-2. Các bảng đang được theo dõi audit:
-- Product
-- Customer
-- Order
-
-### 4. Ví Dụ Thêm Bảng Mới
-
-Giả sử bạn muốn thêm bảng `Category`:
-
-1. Tạo model:
-```csharp
-public class Category
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public string Description { get; set; }
-}
-```
-
-2. Thêm vào DbContext:
-```csharp
-public class ApplicationDbContext : DbContext
-{
-    public DbSet<Category> Categories { get; set; }
-}
-```
-
-3. Tạo migration:
-```bash
-dotnet ef migrations add AddCategory
-dotnet ef database update
-```
-
-Sau khi thực hiện các bước trên, hệ thống sẽ tự động theo dõi và ghi lại mọi thay đổi trên bảng `Category`.
-
-### 5. Kiểm Tra Audit Log
-
-Để kiểm tra các thay đổi đã được ghi lại:
-
-```sql
--- Xem tất cả audit log
-SELECT * FROM AuditLog ORDER BY Timestamp DESC;
-
--- Xem audit log của một bảng cụ thể
-SELECT * FROM AuditLog WHERE TableName = 'Category' ORDER BY Timestamp DESC;
-
--- Xem audit log của một người dùng cụ thể
-SELECT * FROM AuditLog WHERE UserId = 'user123' ORDER BY Timestamp DESC;
 ```
 
 ## Lưu Ý
@@ -276,4 +202,7 @@ SELECT * FROM AuditLog WHERE UserId = 'user123' ORDER BY Timestamp DESC;
 1. Hệ thống sẽ tự động ghi lại tất cả các thay đổi dữ liệu
 2. Audit log được tạo tự động, không cần thêm code xử lý
 3. Đảm bảo đã đăng ký `IHttpContextAccessor` nếu muốn lấy thông tin người dùng
-4. Có thể tùy chỉnh thông tin được lưu trong audit log bằng cách sửa đổi `AuditLog` model 
+4. Có thể tùy chỉnh thông tin được lưu trong audit log bằng cách sửa đổi `AuditLog` model
+5. Khi sử dụng `IAuditService`, bạn có thể ghi log ở bất kỳ đâu trong code
+6. Các thông tin như IP, UserAgent, Timestamp sẽ được tự động lưu
+7. Có thể tùy chỉnh tên action và nội dung log theo nhu cầu 

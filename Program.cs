@@ -2,6 +2,7 @@
 using AuditManagement.Data;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Http;
+using AuditManagement.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // 👉 Cho phép đọc HttpContext trong các service
 builder.Services.AddHttpContextAccessor();
+
+// 👉 Đăng ký AuditService
+builder.Services.AddScoped<IAuditService, AuditService>();
 
 // Add các services khác nếu cần
 builder.Services.AddControllers();
